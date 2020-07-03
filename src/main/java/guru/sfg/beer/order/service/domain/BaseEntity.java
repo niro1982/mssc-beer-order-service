@@ -36,6 +36,11 @@ import java.util.UUID;
 @Getter
 @NoArgsConstructor
 @MappedSuperclass
+
+//@MappedSuperclass in hibernate supports entities to keep basic properties in a super class.
+//The super class annotated by @MappedSuperclass will not behave as independent entity.
+// It will not be associated with any database table. If we want to change the column name different from super class,
+// we need to use @AttributeOverride.
 public class BaseEntity {
 
     public BaseEntity(UUID id, Long version, Timestamp createdDate, Timestamp lastModifiedDate) {
