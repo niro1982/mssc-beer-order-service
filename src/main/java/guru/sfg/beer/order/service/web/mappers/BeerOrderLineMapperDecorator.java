@@ -19,7 +19,7 @@ public abstract class BeerOrderLineMapperDecorator implements BeerOrderLineMappe
     }
 
     @Autowired
-    //the generated implementation of the original mapper is marked with  @Qualifier("delegate")
+    //the generated implementation of the original mapper is marked with  @Qualifier("delegate").
     @Qualifier("delegate")
     public void BeerOrderLineMapper(BeerOrderLineMapper beerOrderLineMapper){
         this.beerOrderLineMapper = beerOrderLineMapper;
