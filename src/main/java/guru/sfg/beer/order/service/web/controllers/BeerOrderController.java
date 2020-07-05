@@ -40,6 +40,7 @@ public class BeerOrderController {
     }
 
     @GetMapping("orders")
+    @ResponseStatus(HttpStatus.OK)
     public BeerOrderPagedList listOrders(@PathVariable("customerId") UUID customerId,
                                          @RequestParam(value = "pageNumber", required = false) Integer pageNumber,
                                          @RequestParam(value = "pageSize", required = false) Integer pageSize){
