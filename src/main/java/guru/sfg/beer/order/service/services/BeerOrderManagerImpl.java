@@ -44,6 +44,14 @@ public class BeerOrderManagerImpl implements BeerOrderManager {
 
         if (isValid){
             sendBeerOrderEvent(beerOrder, BeerOrderEventEnum.VALIDATION_PASSED);
+
+            //we need to bring a fresh instance of the beer order since after sending the
+            //VALIDATION_PASSED event, the interceptor saves to DB and then the beerOrder
+            //has an older version number than the one saved in DB and it will cause
+            //an issue with Hibernate
+            BeerOrder validateOrder = beerOrderRepository.findOneById(orderId);
+
+            sendBeerOrderEvent(validateOrder, BeerOrderEventEnum.ALLOCAT_ORDER);
         } else {
             sendBeerOrderEvent(beerOrder, BeerOrderEventEnum.VALIDATION_FAILED);
         }
