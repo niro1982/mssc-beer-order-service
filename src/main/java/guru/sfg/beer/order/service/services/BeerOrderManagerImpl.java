@@ -14,6 +14,8 @@ import org.springframework.statemachine.support.DefaultStateMachineContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.UUID;
+
 @RequiredArgsConstructor
 @Service
 public class BeerOrderManagerImpl implements BeerOrderManager {
@@ -34,6 +36,17 @@ public class BeerOrderManagerImpl implements BeerOrderManager {
         //sending validation event to the state machine
         sendBeerOrderEvent(savedBeerOrder, BeerOrderEventEnum.VALIDATE_ORDER);
         return savedBeerOrder;
+    }
+
+    @Override
+    public void processValidationResult(UUID orderId, Boolean isValid) {
+        BeerOrder beerOrder = beerOrderRepository.getOne(orderId);
+
+        if (isValid){
+            sendBeerOrderEvent(beerOrder, BeerOrderEventEnum.VALIDATION_PASSED);
+        } else {
+            sendBeerOrderEvent(beerOrder, BeerOrderEventEnum.VALIDATION_FAILED);
+        }
     }
 
     //sending event to the state machine to decide how to progress with its statuses
