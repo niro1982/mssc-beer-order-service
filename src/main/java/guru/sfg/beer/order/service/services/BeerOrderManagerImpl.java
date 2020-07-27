@@ -7,6 +7,7 @@ import guru.sfg.beer.order.service.repositories.BeerOrderRepository;
 import guru.sfg.beer.order.service.sm.BeerOrderStateChangeInterceptor;
 import guru.sfg.brewery.model.BeerOrderDto;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.statemachine.StateMachine;
@@ -15,8 +16,10 @@ import org.springframework.statemachine.support.DefaultStateMachineContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Optional;
 import java.util.UUID;
 
+@Slf4j
 @RequiredArgsConstructor
 @Service
 public class BeerOrderManagerImpl implements BeerOrderManager {
@@ -39,42 +42,47 @@ public class BeerOrderManagerImpl implements BeerOrderManager {
         return savedBeerOrder;
     }
 
+    @Transactional
     @Override
     public void processValidationResult(UUID orderId, Boolean isValid) {
-        BeerOrder beerOrder = beerOrderRepository.getOne(orderId);
+        Optional<BeerOrder> beerOrderOptional = beerOrderRepository.findById(orderId);
 
-        if (isValid){
-            sendBeerOrderEvent(beerOrder, BeerOrderEventEnum.VALIDATION_PASSED);
+        beerOrderOptional.ifPresentOrElse(beerOrder->{
+            if (isValid){
+                sendBeerOrderEvent(beerOrder, BeerOrderEventEnum.VALIDATION_PASSED);
 
-            //we need to bring a fresh instance of the beer order since after sending the
-            //VALIDATION_PASSED event, the interceptor saves to DB and then the beerOrder
-            //has an older version number than the one saved in DB and it will cause
-            //an issue with Hibernate
-            BeerOrder validateOrder = beerOrderRepository.findOneById(orderId);
+                //we need to bring a fresh instance of the beer order since after sending the
+                //VALIDATION_PASSED event, the interceptor saves to DB and then the beerOrder
+                //has an older version number than the one saved in DB and it will cause
+                //an issue with Hibernate
+                BeerOrder validateOrder = beerOrderRepository.findById(orderId).get();
 
-            sendBeerOrderEvent(validateOrder, BeerOrderEventEnum.ALLOCAT_ORDER);
-        } else {
-            sendBeerOrderEvent(beerOrder, BeerOrderEventEnum.VALIDATION_FAILED);
-        }
+                sendBeerOrderEvent(validateOrder, BeerOrderEventEnum.ALLOCAT_ORDER);
+            } else {
+                sendBeerOrderEvent(beerOrder, BeerOrderEventEnum.VALIDATION_FAILED);
+            }
+        }, () -> log.error("Order not found id: " + orderId));
+
+
     }
 
     @Override
     public void beerOrderAllocationPassed(BeerOrderDto beerOrderDto) {
-        BeerOrder beerOrder = beerOrderRepository.getOne(beerOrderDto.getId());
-        sendBeerOrderEvent(beerOrder, BeerOrderEventEnum.ALLOCATION_SUCCESS);
-        updateAllocatedQuantity(beerOrderDto, beerOrder);
+        Optional<BeerOrder> beerOrderOptional = beerOrderRepository.findById(beerOrderDto.getId());
+        sendBeerOrderEvent(beerOrderOptional.get(), BeerOrderEventEnum.ALLOCATION_SUCCESS);
+        updateAllocatedQuantity(beerOrderDto, beerOrderOptional.get());
     }
 
     @Override
     public void beerOrderAllocationPendingInventory(BeerOrderDto beerOrderDto) {
-        BeerOrder beerOrder = beerOrderRepository.getOne(beerOrderDto.getId());
-        sendBeerOrderEvent(beerOrder, BeerOrderEventEnum.ALLOCATION_NO_INVENTORY);
-        updateAllocatedQuantity(beerOrderDto, beerOrder);
+        Optional<BeerOrder> beerOrderOptional = beerOrderRepository.findById(beerOrderDto.getId());
+        sendBeerOrderEvent(beerOrderOptional.get(), BeerOrderEventEnum.ALLOCATION_NO_INVENTORY);
+        updateAllocatedQuantity(beerOrderDto, beerOrderOptional.get());
     }
 
     private void updateAllocatedQuantity(BeerOrderDto beerOrderDto, BeerOrder beerOrder) {
-        BeerOrder allocatedBeerOrder = beerOrderRepository.getOne(beerOrderDto.getId());
-        allocatedBeerOrder.getBeerOrderLines().forEach(beerOrderLine -> {
+        Optional<BeerOrder> allocatedBeerOrderOptional = beerOrderRepository.findById(beerOrderDto.getId());
+        allocatedBeerOrderOptional.get().getBeerOrderLines().forEach(beerOrderLine -> {
             beerOrderDto.getBeerOrderLines().forEach(beerOrderLineDto -> {
                 if (beerOrderLine.getId().equals(beerOrderLineDto.getId())){
                     beerOrderLineDto.setQuantityAllocated(beerOrderLine.getQuantityAllocated());
@@ -86,8 +94,8 @@ public class BeerOrderManagerImpl implements BeerOrderManager {
 
     @Override
     public void beerOrderAllocationFailed(BeerOrderDto beerOrderDto) {
-        BeerOrder beerOrder = beerOrderRepository.getOne(beerOrderDto.getId());
-        sendBeerOrderEvent(beerOrder, BeerOrderEventEnum.ALLOCATION_FAILED);
+        Optional<BeerOrder> beerOrderOptional = beerOrderRepository.findById(beerOrderDto.getId());
+        sendBeerOrderEvent(beerOrderOptional.get(), BeerOrderEventEnum.ALLOCATION_FAILED);
     }
 
     //sending event to the state machine to decide how to progress with its statuses
