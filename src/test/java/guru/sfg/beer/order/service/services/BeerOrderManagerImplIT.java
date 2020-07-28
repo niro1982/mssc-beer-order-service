@@ -12,6 +12,7 @@ import guru.sfg.beer.order.service.repositories.BeerOrderRepository;
 import guru.sfg.beer.order.service.repositories.CustomerRepository;
 import guru.sfg.beer.order.service.services.beer.BeerServiceImpl;
 import guru.sfg.brewery.model.BeerDto;
+import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -21,6 +22,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 
 import java.util.HashSet;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -32,6 +34,7 @@ import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
+@Slf4j
 @ExtendWith(WireMockExtension.class)
 @SpringBootTest
 public class BeerOrderManagerImplIT {
@@ -123,6 +126,33 @@ public class BeerOrderManagerImplIT {
 
         beerOrder.setBeerOrderLines(lines);
         return beerOrder;
+    }
+
+    @Test
+    public void testNewToPickedUp() throws JsonProcessingException {
+        BeerDto dto = BeerDto.builder().id(beerId).upc("12345").build();
+
+        wireMockServer.stubFor(get(BeerServiceImpl.BEER_UPC_PATH_V1 +"12345")
+                .willReturn(okJson(objectMapper.writeValueAsString(dto))));
+
+        BeerOrder beerOrder = createBeerOrder();
+
+        BeerOrder savedOrder = beerOrderManager.newBeerOrder(beerOrder);
+
+        await().untilAsserted(()->{
+            Optional<BeerOrder> beerOrderOptional = beerOrderRepository.findById(savedOrder.getId());
+            beerOrderOptional.ifPresentOrElse(beerOrder1 -> {
+                assertEquals(BeerOrderStatusEnum.ALLOCATED, beerOrder1.getOrderStatus());
+            }, ()-> log.error("Beer order not found for id: " + beerOrder.getId()));
+        });
+
+        beerOrderManager.beerOrderPickup(savedOrder.getId());
+        await().untilAsserted(()->{
+            Optional<BeerOrder> beerOrderOptional = beerOrderRepository.findById(savedOrder.getId());
+            beerOrderOptional.ifPresentOrElse(beerOrder1 -> {
+                assertEquals(BeerOrderStatusEnum.PICKED_UP, beerOrder1.getOrderStatus());
+            }, ()-> log.error("Beer order not found for id: " + beerOrder.getId()));
+        });
     }
 
 }
