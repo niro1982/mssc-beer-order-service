@@ -53,4 +53,5 @@ public class BeerOrderDto {
     private List<BeerOrderLineDto> beerOrderLines;
     private String orderStatus; //can be either a string or enum (can make a string so not to expose the object out)
     private String orderStatusCallbackUrl;
+    private int orderQuantity;
 }

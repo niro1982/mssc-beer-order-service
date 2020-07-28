@@ -16,7 +16,7 @@ public class AllocationResultListener {
 
     private final BeerOrderManager beerOrderManager;
 
-    @JmsListener(destination = JmsConfig.VALIDATE_ORDER_RESPONSE_QUEUE)
+    @JmsListener(destination = JmsConfig.ALLOCATE_ORDER_RESPONSE_QUEUE)
     public void listen(AllocationOrderResponse orderResponse){
         boolean isError = orderResponse.getAllocationError();
         boolean isPendingInventory = orderResponse.getPendingInventory();
