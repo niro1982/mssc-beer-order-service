@@ -131,22 +131,37 @@ public class BeerOrderManagerImplIT {
         });
     }
 
-    public BeerOrder createBeerOrder(){
-        BeerOrder beerOrder = BeerOrder.builder()
-                .customer(testCustomer)
-                .build();
+    @Test
+    void testFailedAllocation() throws JsonProcessingException {
+        BeerDto beerDto = BeerDto.builder().id(beerId).upc("12345").build();
+        wireMockServer.stubFor(get(BeerServiceImpl.BEER_UPC_PATH_V1 +"12345")
+                .willReturn(okJson(objectMapper.writeValueAsString(beerDto))));
+        BeerOrder beerOrder = createBeerOrder();
+        beerOrder.setCustomerRef("fail-allocation");
 
-        Set<BeerOrderLine> lines = new HashSet<>();
+        BeerOrder savedBeerOrder = beerOrderManager.newBeerOrder(beerOrder);
+        await().untilAsserted(()->{
+            BeerOrder foundOrder = beerOrderRepository.findById(beerOrder.getId()).get();
 
-        lines.add(BeerOrderLine.builder()
-        .beerOrder(beerOrder)
-        .beerId(beerId)
-        .upc("12345")
-        .orderQuantity(1)
-        .build());
+            assertEquals(BeerOrderStatusEnum.ALLOCATION_EXCEPTION, foundOrder.getOrderStatus());
+        });
 
-        beerOrder.setBeerOrderLines(lines);
-        return beerOrder;
+    }
+
+    @Test
+    void testPartiallyFailedAllocation() throws JsonProcessingException {
+        BeerDto beerDto = BeerDto.builder().id(beerId).upc("12345").build();
+        wireMockServer.stubFor(get(BeerServiceImpl.BEER_UPC_PATH_V1 +"12345")
+                .willReturn(okJson(objectMapper.writeValueAsString(beerDto))));
+        BeerOrder beerOrder = createBeerOrder();
+        beerOrder.setCustomerRef("fail-allocation-pending-inventory");
+
+        BeerOrder savedBeerOrder = beerOrderManager.newBeerOrder(beerOrder);
+        await().untilAsserted(()->{
+            BeerOrder foundOrder = beerOrderRepository.findById(beerOrder.getId()).get();
+
+            assertEquals(BeerOrderStatusEnum.PENDING_INVENTORY, foundOrder.getOrderStatus());
+        });
     }
 
     @Test
@@ -176,4 +191,22 @@ public class BeerOrderManagerImplIT {
         });
     }
 
+
+    public BeerOrder createBeerOrder(){
+        BeerOrder beerOrder = BeerOrder.builder()
+                .customer(testCustomer)
+                .build();
+
+        Set<BeerOrderLine> lines = new HashSet<>();
+
+        lines.add(BeerOrderLine.builder()
+                .beerOrder(beerOrder)
+                .beerId(beerId)
+                .upc("12345")
+                .orderQuantity(1)
+                .build());
+
+        beerOrder.setBeerOrderLines(lines);
+        return beerOrder;
+    }
 }
