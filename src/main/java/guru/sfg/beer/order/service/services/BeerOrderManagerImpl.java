@@ -19,6 +19,8 @@ import org.springframework.transaction.annotation.Transactional;
 import javax.persistence.EntityManager;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -55,6 +57,8 @@ public class BeerOrderManagerImpl implements BeerOrderManager {
             if (isValid){
                 sendBeerOrderEvent(beerOrder, BeerOrderEventEnum.VALIDATION_PASSED);
 
+                awaitForStatus(orderId, BeerOrderStatusEnum.VALIDATED);
+
                 //we need to bring a fresh instance of the beer order since after sending the
                 //VALIDATION_PASSED event, the interceptor saves to DB and then the beerOrder
                 //has an older version number than the one saved in DB and it will cause
@@ -74,6 +78,7 @@ public class BeerOrderManagerImpl implements BeerOrderManager {
     public void beerOrderAllocationPassed(BeerOrderDto beerOrderDto) {
         Optional<BeerOrder> beerOrderOptional = beerOrderRepository.findById(beerOrderDto.getId());
         sendBeerOrderEvent(beerOrderOptional.get(), BeerOrderEventEnum.ALLOCATION_SUCCESS);
+        awaitForStatus(beerOrderDto.getId(), BeerOrderStatusEnum.VALIDATED);
         updateAllocatedQuantity(beerOrderDto);
     }
 
@@ -81,6 +86,7 @@ public class BeerOrderManagerImpl implements BeerOrderManager {
     public void beerOrderAllocationPendingInventory(BeerOrderDto beerOrderDto) {
         Optional<BeerOrder> beerOrderOptional = beerOrderRepository.findById(beerOrderDto.getId());
         sendBeerOrderEvent(beerOrderOptional.get(), BeerOrderEventEnum.ALLOCATION_NO_INVENTORY);
+        awaitForStatus(beerOrderDto.getId(), BeerOrderStatusEnum.PENDING_INVENTORY);
         updateAllocatedQuantity(beerOrderDto);
     }
 
@@ -148,5 +154,43 @@ public class BeerOrderManagerImpl implements BeerOrderManager {
         sm.start();
 
         return sm;
+    }
+
+    /**
+     * since there was an issue of saving a new order to DB by state machine and while continuing the code the
+     * order was not found yet in DB (timing issue), we create this method to wait until order is saved in DB
+     * @param beerOrderId
+     * @param statusEnum
+     */
+    private void awaitForStatus(UUID beerOrderId, BeerOrderStatusEnum statusEnum){
+        AtomicBoolean found = new AtomicBoolean();
+        AtomicInteger loopCount = new AtomicInteger();
+
+        while (!found.get()){
+            if (loopCount.incrementAndGet() > 10){
+                found.set(true);
+                log.debug("loop retries exceeded");
+            }
+
+            beerOrderRepository.findById(beerOrderId).ifPresentOrElse(beerOrder -> {
+                if (beerOrder.getOrderStatus().equals(statusEnum)){
+                    found.set(true);
+                    log.debug("Order found");
+                } else {
+                    log.debug("Order status not equal. expected " + statusEnum.name() + " found: " + beerOrder.getOrderStatus().name());
+                }
+            }, () -> {
+                log.debug("order id not found");
+            });
+
+            if (!found.get()){
+                log.debug("sleeping for retry");
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    //do nothing
+                }
+            }
+        }
     }
 }
